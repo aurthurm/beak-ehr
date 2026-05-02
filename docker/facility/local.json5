@@ -1,0 +1,22 @@
+{
+  db: {
+    host: 'postgres',
+    port: '5432',
+    name: 'facility',
+    verbose: false,
+    username: 'tamanu',
+    password: 'tamanu',
+    migrateOnStartup: true,
+  },
+  sync: {
+    host: 'http://central:3000',
+    email: 'facility-1@tamanu.io',
+    password: 'facility-1',
+    enabled: true,
+  },
+  serverFacilityIds: ['facility-1'],
+  log: {
+    consoleLevel: 'http',
+  },
+  countryTimeZone: 'Pacific/Auckland',
+}

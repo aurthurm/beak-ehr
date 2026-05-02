@@ -60,6 +60,36 @@ $ npm run web-start-dev
 
 You'll need to install postgres and configure databases for central and facility.
 
+## Docker Compose
+
+If you want the service layer in containers instead of running Postgres and the
+servers directly on the host, use the Compose stack in [`compose.yaml`](/home/administrator/Documents/Development/registries/tamanu/compose.yaml).
+
+```bash
+docker compose up --build postgres central central-provision facility
+```
+
+This starts the stack in the right order:
+
+- PostgreSQL on `localhost:5432` with the `central` and `facility` databases
+- Central on `http://localhost:3000`
+- a one-shot Central provisioning step with the sample admin and facility data
+- Facility on `http://localhost:4000`
+
+The default seeded credentials are:
+
+- Central admin: `admin@tamanu.io` / `admin`
+- Facility sync user: `facility-1@tamanu.io` / `facility-1`
+
+The Electron desktop client still needs a host GUI session, so keep using
+`npm run web-start-dev` locally if you want the desktop app.
+
+If you want to reset the stack, stop Compose and remove the named volume:
+
+```bash
+docker compose down -v
+```
+
 ## Configure
 
 <details>

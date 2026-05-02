@@ -1,49 +1,58 @@
 import { readFileSync } from 'fs';
-import { execFileSync } from 'child_process';
+import path from 'path';
 
-function cleanupLeadingGarbage(jsonStr) {
-  if (jsonStr.startsWith('{')) return jsonStr;
+const rootPackage = JSON.parse(readFileSync('./package.json', 'utf8'));
 
-  // some environments come with garbage characters at the beginning
-  const firstOpenBrace = jsonStr.indexOf('{');
-  if (firstOpenBrace === -1) return jsonStr;
-  return jsonStr.slice(firstOpenBrace);
+function readWorkspaceManifests() {
+  const manifests = new Map();
+
+  for (const workspacePath of rootPackage.workspaces.packages) {
+    const pkgPath = path.join(workspacePath, 'package.json');
+    try {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+      if (!pkg?.name) {
+        console.error(`Skipping ${workspacePath} as it has no package name...`);
+        continue;
+      }
+
+      manifests.set(pkg.name, {
+        pkg,
+        pkgPath: `./${pkgPath}`,
+        workspacePath,
+      });
+    } catch (err) {
+      console.error(`Skipping ${workspacePath} as we can't read its package.json...`);
+    }
+  }
+
+  return manifests;
 }
 
-function extractDependencyTree(workspaceTree, workspaces) {
+function extractDependencyTree(manifests) {
   const dependencyTree = {};
 
-  Object.entries(workspaceTree.dependencies).forEach(([workspace, info]) => {
-    let dependencies = [];
-    if (info.dependencies) {
-      dependencies = Object.keys(info.dependencies).filter(dependency =>
-        workspaces.has(dependency),
-      );
+  for (const [name, { pkg }] of manifests.entries()) {
+    const workspaceDeps = new Set();
+    for (const section of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies']) {
+      for (const dependency of Object.keys(pkg[section] ?? {})) {
+        if (manifests.has(dependency)) {
+          workspaceDeps.add(dependency);
+        }
+      }
     }
-    dependencyTree[workspace] = dependencies;
-  });
+
+    dependencyTree[name] = [...workspaceDeps];
+  }
 
   return dependencyTree;
 }
 
-function extractLocation(resolvedPath) {
-  const packageIndex = resolvedPath.indexOf('packages');
-  return resolvedPath.slice(packageIndex);
-}
-
 export function doWithAllPackages(fn) {
-  const workspaceTree = JSON.parse(
-    cleanupLeadingGarbage(
-      execFileSync('npm', ['ls', '--workspaces', '--legacy-peer-deps', '--json'], {
-        encoding: 'utf8',
-      }),
-    ),
-  );
-
-  const workspaces = new Set(Object.keys(workspaceTree.dependencies));
+  const manifests = readWorkspaceManifests();
+  const workspaces = new Set(manifests.keys());
   const processed = new Set();
 
-  const dependencyTree = extractDependencyTree(workspaceTree, workspaces);
+  const dependencyTree = extractDependencyTree(manifests);
   const packagesThatAreDependedOn = new Set(Object.values(dependencyTree).flat());
 
   // find and build dependencies for each workspace
@@ -53,21 +62,11 @@ export function doWithAllPackages(fn) {
     for (const workspace of workspaces) {
       if (processed.has(workspace)) continue;
 
-      const { resolved } = workspaceTree.dependencies[workspace];
-      const location = extractLocation(resolved);
+      const { pkg, pkgPath } = manifests.get(workspace);
       const workspaceDependencies = dependencyTree[workspace];
 
       if (workspaceDependencies.every(dep => processed.has(dep))) {
         processed.add(workspace);
-
-        const pkgPath = `./${location}/package.json`;
-        let pkg;
-        try {
-          pkg = JSON.parse(readFileSync(pkgPath));
-        } catch (err) {
-          console.error(`Skipping ${workspace} as we can't read its package.json...`);
-          continue;
-        }
 
         fn(workspace, pkg, pkgPath, packagesThatAreDependedOn.has(workspace));
       }

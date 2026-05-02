@@ -1,0 +1,27 @@
+{
+  db: {
+    host: 'postgres',
+    port: '5432',
+    name: 'central',
+    verbose: false,
+    username: 'tamanu',
+    password: 'tamanu',
+    migrateOnStartup: true,
+  },
+  primaryTimeZone: 'Pacific/Auckland',
+  schedules: {
+    sendStatusToMetaServer: {
+      enabled: false,
+    },
+  },
+  localisation: {
+    data: {
+      country: {
+        name: 'Utopia',
+        alpha-2: 'UT',
+        alpha-3: 'UTO',
+      },
+      timeZone: 'Pacific/Auckland',
+    },
+  },
+}

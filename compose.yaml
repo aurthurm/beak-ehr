@@ -1,0 +1,88 @@
+name: tamanu
+
+x-server-build: &server-build
+  context: .
+  dockerfile: Dockerfile
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  central:
+    build:
+      <<: *server-build
+      args:
+        PACKAGE_PATH: central-server
+    command: ["startAll"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./docker/central/local.json5:/config/local.json5:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  central-provision:
+    build:
+      <<: *server-build
+      args:
+        PACKAGE_PATH: central-server
+    command: ["provision", "/config/provisioning.json5", "--skip-if-not-needed"]
+    depends_on:
+      central:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+    restart: "no"
+    volumes:
+      - ./docker/central/local.json5:/config/local.json5:ro
+      - ./docker/provisioning.json5:/config/provisioning.json5:ro
+
+  facility:
+    build:
+      <<: *server-build
+      args:
+        PACKAGE_PATH: facility-server
+    command: ["startAll"]
+    depends_on:
+      central-provision:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./docker/facility/local.json5:/config/local.json5:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:4000/api/public/ping >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  postgres-data:
